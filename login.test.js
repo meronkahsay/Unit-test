@@ -1,33 +1,60 @@
-const login = (email, password) => {
-    if (!email || !password) {
-        throw new Error('Email and password are required.');
-    }
-    if (email === 'test@example.com' && password === 'password123') {
-        return { success: true, message: 'Login successful.' };
-    } else {
-        return { success: false, message: 'Invalid credentials.' };
-    }
-  };
-  module.exports = { login};
-  
-  
+/**@jest-environment jsdom
+*/
 
-  const { login} = require('./login');
-  describe('Authentication Tests', () => {
-      describe('Login', () => {
-          it('should successfully log in with valid credentials', () => {
-              const result = login('test@example.com', 'password123');
-              expect(result.success).toBe(true);
-              expect(result.message).toBe('Login successful.');
-          });
-          it('should fail to log in with invalid credentials', () => {
-              const result = login('wrong@example.com', 'wrongpassword');
-              expect(result.success).toBe(false);
-              expect(result.message).toBe('Invalid credentials.');
-          });
-          it('should throw an error if email or password is not provided', () => {
-              expect(() => login('', 'password')).toThrow('Email and password are required.');
-              expect(() => login('email', '')).toThrow('Email and password are required.');
-          });
-      });
-  });
+const {login} = require('./login.js');
+
+global.fetch = jest.fn();
+global.alert = jest.fn();
+
+Object.defineProperty(window, 'localStorage', {
+ value: {
+   setItem: jest.fn()
+ },
+ writable: true
+});
+
+beforeEach(() => {
+ document.body.innerHTML = `
+   <form>
+     <input type="email" id="email">
+     <input type="password" id="password">
+     <button type="submit">Login</button>
+   </form>
+ `;
+});
+
+test('successful login', async () => {
+ document.getElementById('email').value = 'test@example.com';
+ document.getElementById('password').value = 'password';
+
+ fetch.mockResolvedValueOnce({
+   ok: true,
+   json: async () => ({ token: '123abc' })
+ });
+
+ Object.defineProperty(window, 'location', {
+   writable: true,
+   value: { href: '' }
+ });
+
+ const e = { preventDefault: jest.fn() };
+ await login(e);
+
+ expect(fetch).toHaveBeenCalledWith('/api/login', expect.any(Object));
+ expect(window.localStorage.setItem).toHaveBeenCalledWith('token', '123abc');
+});
+
+test('failed login shows alert', async () => {
+ document.getElementById('email').value = 'fail@example.com';
+ document.getElementById('password').value = 'wrong';
+
+ fetch.mockResolvedValueOnce({
+   ok: false,
+   json: async () => ({ message: 'Invalid credentials' })
+ });
+
+ const e = { preventDefault: jest.fn() };
+ await login(e);
+
+ expect(alert).toHaveBeenCalledWith('Invalid credentials');
+});
